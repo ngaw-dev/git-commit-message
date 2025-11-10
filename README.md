@@ -1,10 +1,10 @@
 # Git Commit Message Generator
 
-A Node.js script that analyzes staged file changes and automatically generates appropriate commit messages using AI (local Llama models) or rule-based approaches.
+A Node.js script that analyzes staged file changes and automatically generates appropriate commit messages using AI (local Ollama models) or rule-based approaches.
 
 ## Features
 
-- 🦙 **AI-Powered Messages**: Generate natural commit messages using local Llama models via Ollama
+- 🦙 **AI-Powered Messages**: Generate natural commit messages using local AI models via Ollama
 - 🔍 **Smart File Analysis**: Categorizes files by type (code, config, docs, tests, styles, scripts)
 - 📝 **Automatic Message Generation**: Creates descriptive commit messages based on changes
 - 🎯 **Staged Changes Only**: Analyzes only staged files for precise commits
@@ -12,7 +12,7 @@ A Node.js script that analyzes staged file changes and automatically generates a
 - 🔧 **CLI Options**: Flexible command-line interface
 - 💬 **Interactive Mode**: Confirms before committing (TTY environments)
 - 🔄 **Fallback System**: Automatically falls back to rule-based generation if AI is unavailable
-- 🎛️ **Model Selection**: Choose from available local Llama models
+- 🎛️ **Model Selection**: Choose from available local Ollama models
 
 ## Installation
 
@@ -29,11 +29,10 @@ A Node.js script that analyzes staged file changes and automatically generates a
 # Start Ollama server
 ollama serve
 
-# Pull a Llama model (recommended)
-ollama pull llama3.2:3b
-
-# Or pull a smaller model for faster responses
-ollama pull llama3.2:1b
+# Pull an AI model (recommended options)
+ollama pull deepseek-r1:latest
+ollama pull gemma3n:latest
+ollama pull llama2:latest
 
 # List available models
 ollama list
@@ -54,9 +53,9 @@ ollama list
 node git-commit-message.js
 
 # Run with AI-powered generation (requires Ollama)
-node git-commit-message.js --llama
+node git-commit-message.js --ollama
 
-# List available Llama models
+# List available Ollama models
 node git-commit-message.js --list-models
 ```
 
@@ -69,10 +68,10 @@ node git-commit-message.js --detailed         # Detailed messages
 node git-commit-message.js --verbose --detailed
 
 # AI-powered options
-node git-commit-message.js --llama            # Use local Llama model
-node git-commit-message.js --llama --model llama3.2:1b    # Specific model
-node git-commit-message.js --llama --host localhost        # Custom host
-node git-commit-message.js --llama --port 11434          # Custom port
+node git-commit-message.js --ollama            # Use local Ollama model
+node git-commit-message.js --ollama --model gemma3n:latest  # Specific model
+node git-commit-message.js --ollama --host localhost        # Custom host
+node git-commit-message.js --ollama --port 11434          # Custom port
 
 # Utility
 node git-commit-message.js --list-models      # List available models
@@ -84,7 +83,7 @@ node git-commit-message.js --help             # Show help
 ```bash
 node git-commit-message.js -v          # Same as --verbose
 node git-commit-message.js -d          # Same as --detailed
-node git-commit-message.js -l          # Same as --llama
+node git-commit-message.js -o          # Same as --ollama
 node git-commit-message.js -m <model>  # Same as --model
 node git-commit-message.js -h          # Same as --help
 ```
@@ -107,13 +106,13 @@ node git-commit-message.js -h          # Same as --help
    - "Update documentation, test file"
    - "Add: Enhance source code file, update stylesheet"
 
-### AI-Powered Generation (Llama)
+### AI-Powered Generation (Ollama)
 1. **Diff Analysis**: Extracts detailed diff content using `git diff --cached --unified=3`
 2. **Context Prompting**: Creates a structured prompt with:
    - File list
    - Git diff content (truncated if too long)
    - Commit message guidelines
-3. **Llama Processing**: Sends prompt to local Llama model via Ollama API
+3. **AI Processing**: Sends prompt to local AI model via Ollama API
 4. **Response Cleaning**: Processes and validates the AI response
 5. **Quality Check**: Ensures message meets length and format requirements
 
@@ -146,13 +145,13 @@ Use this message? (Y/n): y
 ```bash
 # After implementing a new feature
 $ git add src/user-auth.js tests/auth.test.js
-$ node git-commit-message.js --llama
+$ node git-commit-message.js --ollama
 
 🔍 Analyzing 2 staged files...
-🦙 Generating commit message with local Llama...
-✨ Llama-generated message ready!
+🦙 Generating commit message with local Ollama...
+✨ Ollama-generated message ready!
 
-📝 Generated commit message (🦙 Llama):
+📝 Generated commit message (🦙 Ollama):
 "Add user authentication with comprehensive test coverage"
 
 Use this message? (Y/n): y
@@ -180,21 +179,21 @@ Use this message? (Y/n): y
 # List available models
 $ node git-commit-message.js --list-models
 
-🦙 Available Llama models:
-  • llama3.2:3b (4.7 GB)
-  • llama3.2:1b (1.3 GB)
+🦙 Available Ollama models:
+  • deepseek-r1:latest (5.2 GB)
+  • gemma3n:latest (7.5 GB)
 
 Use with: --model <model-name>
 
 # Use specific model
 $ git add src/api.js
-$ node git-commit-message.js --llama --model llama3.2:1b
+$ node git-commit-message.js --ollama --model llama2:latest
 
 🔍 Analyzing 1 staged file...
-🦙 Generating commit message with local Llama...
-✨ Llama-generated message ready!
+🦙 Generating commit message with local Ollama...
+✨ Ollama-generated message ready!
 
-📝 Generated commit message (🦙 Llama):
+📝 Generated commit message (🦙 Ollama):
 "Implement REST API endpoints for data management"
 
 Use this message? (Y/n): y
@@ -205,11 +204,11 @@ Use this message? (Y/n): y
 ```bash
 # When Ollama is not running
 $ git add package.json
-$ node git-commit-message.js --llama
+$ node git-commit-message.js --ollama
 
 🔍 Analyzing 1 staged file...
-🦙 Generating commit message with local Llama...
-🤖 Local Llama server not found. Falling back to rule-based generation...
+🦙 Generating commit message with local Ollama...
+🤖 Ollama server not found. Falling back to rule-based generation...
 📝 Rule-based message generated
 
 📝 Generated commit message (🔧 Rule-based):
@@ -228,7 +227,7 @@ Add this to your `~/.gitconfig` file:
 ```ini
 [alias]
     commit-msg = "!node /path/to/git-commit-message.js"
-    commit-ai = "!node /path/to/git-commit-message.js --llama"
+    commit-ai = "!node /path/to/git-commit-message.js --ollama"
     commit-verbose = "!node /path/to/git-commit-message.js --verbose"
 ```
 
@@ -247,8 +246,8 @@ Add to your `package.json`:
 {
   "scripts": {
     "commit": "node git-commit-message.js",
-    "commit-ai": "node git-commit-message.js --llama",
-    "commit-detailed": "node git-commit-message.js --detailed --llama"
+    "commit-ai": "node git-commit-message.js --ollama",
+    "commit-detailed": "node git-commit-message.js --detailed --ollama"
   }
 }
 ```
@@ -267,7 +266,7 @@ Create `.git/hooks/pre-commit`:
 ```bash
 #!/bin/bash
 echo "Generating AI commit message..."
-node /path/to/git-commit-message.js --llama
+node /path/to/git-commit-message.js --ollama
 ```
 
 Make it executable:
@@ -287,7 +286,7 @@ Add to your `.vscode/tasks.json`:
       "label": "Git Commit (AI)",
       "type": "shell",
       "command": "node",
-      "args": ["/path/to/git-commit-message.js", "--llama"],
+      "args": ["/path/to/git-commit-message.js", "--ollama"],
       "group": "build",
       "presentation": {
         "echo": true,
@@ -316,8 +315,9 @@ curl http://localhost:11434/api/tags
 **No models available:**
 ```bash
 # Pull recommended models
-ollama pull llama3.2:3b
-ollama pull llama3.2:1b
+ollama pull deepseek-r1:latest
+ollama pull gemma3n:latest
+ollama pull llama2:latest
 
 # List available models
 ollama list
@@ -326,7 +326,7 @@ ollama list
 **Port conflicts:**
 ```bash
 # Use custom port
-node git-commit-message.js --llama --port 11435
+node git-commit-message.js --ollama --port 11435
 ```
 
 ### Script Issues
@@ -346,7 +346,7 @@ sudo apt install nodejs npm  # Ubuntu
 
 ## Performance Tips
 
-1. **Model Selection**: Use smaller models (`llama3.2:1b`) for faster responses
+1. **Model Selection**: Use smaller models (`gemma3n:latest`) for faster responses
 2. **Diff Size**: Large diffs are truncated to 2000 characters for performance
 3. **Fallback**: Rule-based generation is always faster than AI generation
 4. **Network**: Ensure Ollama server is responsive for best AI performance
@@ -379,8 +379,8 @@ The script provides:
 
 ### For AI Features
 - Ollama installed and running
-- At least one Llama model pulled
-- Sufficient RAM for model (1B model ~2GB, 3B model ~6GB)
+- At least one AI model pulled
+- Sufficient RAM for model (varies by model size)
 
 ## License
 

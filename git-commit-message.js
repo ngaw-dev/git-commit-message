@@ -200,7 +200,7 @@ function hasStagedChanges() {
 }
 
 /**
- * Get detailed diff information for Llama prompt
+ * Get detailed diff information for Ollama prompt
  */
 function getDetailedDiff() {
   try {
@@ -335,10 +335,14 @@ function analyzeCodeChanges(files, diff) {
 /**
  * Check if local Ollama server is available and get available models
  */
-async function checkOllamaServer(host = 'localhost', port = '11434') {
+async function checkOllamaServer(host = 'http://127.0.0.1', port = '11434') {
   return new Promise((resolve) => {
+    // Handle null/undefined host and extract hostname from URL if it includes protocol
+    const safeHost = host || 'http://127.0.0.1';
+    const hostname = safeHost.includes('://') ? new URL(safeHost).hostname : safeHost;
+
     const options = {
-      hostname: host,
+      hostname: hostname,
       port: port,
       path: '/api/tags',
       method: 'GET',
@@ -377,8 +381,8 @@ async function checkOllamaServer(host = 'localhost', port = '11434') {
 /**
  * Generate commit message using local Ollama server
  */
-async function generateCommitMessageWithLlama(files, diff, codeAnalysis, options = {}) {
-  const ollamaStatus = await checkOllamaServer(options.llamaHost, options.llamaPort);
+async function generateCommitMessageWithOllama(files, diff, codeAnalysis, options = {}) {
+  const ollamaStatus = await checkOllamaServer(options.ollamaHost, options.ollamaPort);
 
   if (!ollamaStatus.available) {
     console.log('🤖 Ollama server not found. Falling back to rule-based generation...\n');
@@ -386,10 +390,10 @@ async function generateCommitMessageWithLlama(files, diff, codeAnalysis, options
   }
 
   // Check if we have any compatible models
-  const defaultModels = ['llama3.2:3b', 'llama3.2:1b', 'llama3.1:8b', 'llama3:8b', 'llama3:instruct', 'codellama:7b', 'mistral:7b'];
+  const defaultModels = ['llama2:latest', 'gemma3n:latest', 'deepseek-r1:latest', 'gpt-oss:20b'];
   const availableModelNames = ollamaStatus.models.map(m => m.name);
 
-  let model = options.llamaModel;
+  let model = options.ollamaModel;
   if (!model) {
     // Find first available model from our preferred list
     model = defaultModels.find(m => availableModelNames.includes(m)) || availableModelNames[0];
@@ -403,42 +407,17 @@ async function generateCommitMessageWithLlama(files, diff, codeAnalysis, options
   console.log(`🦙 Using Ollama model: ${model}`);
 
   return new Promise((resolve, reject) => {
-    // Create a detailed prompt for Llama with code analysis
-    const prompt = `You are an expert developer who writes excellent git commit messages.
-Based on the following comprehensive analysis, generate a concise and descriptive commit message.
+    // Create a concise prompt for Ollama for faster response
+    const changes = files.join(', ');
+    const mainAction = codeAnalysis.patterns.length > 0 ? codeAnalysis.patterns[0].action : 'Update';
 
-Files changed: ${files.join(', ')}
+    const prompt = `Git commit message for: ${changes}
 
-Code Analysis Summary: ${codeAnalysis.summary}
+Main change: ${mainAction}
 
-Detected Patterns:
-${codeAnalysis.patterns.length > 0 ? codeAnalysis.patterns.map(p => `- ${p.action}`).join('\n') : '- No specific patterns detected'}
+Format: present tense, imperative mood, under 50 characters, no period.
 
-Functions/Classes: ${codeAnalysis.functions.length > 0 ? codeAnalysis.functions.join(', ') : 'None'}
-Imports: ${codeAnalysis.imports.length > 0 ? codeAnalysis.imports.slice(0, 3).join(', ') + (codeAnalysis.imports.length > 3 ? '...' : '') : 'None'}
-Tests: ${codeAnalysis.tests.length > 0 ? `${codeAnalysis.tests.length} test cases` : 'None'}
-Types: ${codeAnalysis.types.length > 0 ? codeAnalysis.types.join(', ') : 'None'}
-
-Git diff (relevant parts):
-${diff.length > 1500 ? diff.substring(0, 1500) + '\n... (truncated for brevity)' : diff}
-
-Based on this analysis, determine the most important change and create a commit message that:
-- Is under 72 characters
-- Uses present tense, imperative mood (Add, Fix, Update, Remove, Refactor, Improve, etc.)
-- Focuses on the primary change or feature addition
-- Is specific but concise
-- Prioritizes user-facing functionality over internal changes
-- Don't include file names unless absolutely necessary
-- Don't end with a period
-
-If multiple significant changes exist, prioritize them in this order:
-1. New features/functionality
-2. Bug fixes
-3. Refactoring/optimization
-4. Documentation/configuration
-5. Tests/quality improvements
-
-Generate only the commit message, nothing else:`;
+Commit message:`;
 
     const requestData = JSON.stringify({
       model: model,
@@ -447,23 +426,23 @@ Generate only the commit message, nothing else:`;
       options: {
         temperature: 0.3,
         top_p: 0.9,
-        max_tokens: 80,
-        num_predict: 80,
+        max_tokens: 20,
+        num_predict: 20,
         repeat_penalty: 1.1,
         seed: 42
       }
     });
 
     const ollamaOptions = {
-      hostname: options.llamaHost || 'localhost',
-      port: options.llamaPort || '11434',
+      hostname: options.ollamaHost || 'localhost',
+      port: options.ollamaPort || '11434',
       path: '/api/generate',
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(requestData)
       },
-      timeout: 20000
+      timeout: 45000
     };
 
     const req = http.request(ollamaOptions, (res) => {
@@ -483,34 +462,36 @@ Generate only the commit message, nothing else:`;
               .replace(/^["']|["']$/g, '') // Remove surrounding quotes
               .replace(/\.$/, '') // Remove trailing period
               .replace(/\n+/g, ' ') // Replace newlines with spaces
+              .replace(/^(?:Sure! Here is(?: a potential)? commit message for the changes you described:|Here's a commit message:|Git commit message:)/i, '') // Remove AI prefixes
+              .replace(/\s+-\s+[Ll]og$/, '') // Remove artifacts like " - log"
               .trim()
               .split('\n')[0]; // Take only the first line if there are multiple
 
             if (cleanedMessage.length > 0 && cleanedMessage.length < 100) {
               resolve(cleanedMessage);
             } else {
-              console.log('🤖 Llama response was not suitable. Falling back to rule-based generation...\n');
+              console.log('🤖 Ollama response was not suitable. Falling back to rule-based generation...\n');
               resolve(null);
             }
           } else {
-            console.log('🤖 No response from Llama. Falling back to rule-based generation...\n');
+            console.log('🤖 No response from Ollama. Falling back to rule-based generation...\n');
             resolve(null);
           }
         } catch (error) {
-          console.log('🤖 Error parsing Llama response. Falling back to rule-based generation...\n');
+          console.log('🤖 Error parsing Ollama response. Falling back to rule-based generation...\n');
           resolve(null);
         }
       });
     });
 
     req.on('error', (error) => {
-      console.log('🤖 Error connecting to Llama server. Falling back to rule-based generation...\n');
+      console.log('🤖 Error connecting to Ollama server. Falling back to rule-based generation...\n');
       resolve(null);
     });
 
     req.on('timeout', () => {
       req.destroy();
-      console.log('🤖 Llama request timed out. Falling back to rule-based generation...\n');
+      console.log('🤖 Ollama request timed out. Falling back to rule-based generation...\n');
       resolve(null);
     });
 
@@ -537,10 +518,10 @@ async function main() {
     staged: args.includes('--staged') || args.includes('-s'),
     detailed: args.includes('--detailed') || args.includes('-d'),
     help: args.includes('--help') || args.includes('-h'),
-    llama: args.includes('--llama') || args.includes('-l'),
-    llamaModel: getArgValue(args, '--model') || getArgValue(args, '-m'),
-    llamaHost: getArgValue(args, '--host'),
-    llamaPort: getArgValue(args, '--port'),
+    ollama: args.includes('--ollama') || args.includes('-o'),
+    ollamaModel: getArgValue(args, '--model') || getArgValue(args, '-m'),
+    ollamaHost: getArgValue(args, '--host') || undefined,
+    ollamaPort: getArgValue(args, '--port') || undefined,
     listModels: args.includes('--list-models')
   };
 
@@ -552,18 +533,18 @@ Options:
   -v, --verbose       Show full file list in commit message
   -s, --staged        Only check staged files (default)
   -d, --detailed      Generate more detailed commit message
-  -l, --llama         Use local Llama model for message generation
-  -m, --model <name>  Specify Llama model (default: llama3.2:3b)
-  --host <host>       Llama server host (default: localhost)
-  --port <port>       Llama server port (default: 11434)
-  --list-models       List available Llama models
+  -o, --ollama        Use local Ollama model for message generation
+  -m, --model <name>  Specify Ollama model (default: auto-detect)
+  --host <host>       Ollama server host (default: localhost)
+  --port <port>       Ollama server port (default: 11434)
+  --list-models       List available Ollama models
   -h, --help          Show this help message
 
 Examples:
   node git-commit-message.js
-  node git-commit-message.js --llama
-  node git-commit-message.js --llama --model llama3.2:1b
-  node git-commit-message.js --verbose --llama
+  node git-commit-message.js --ollama
+  node git-commit-message.js --ollama --model gemma3n:latest
+  node git-commit-message.js --verbose --ollama
   node git-commit-message.js --list-models
 
 Note: Requires Ollama server running locally with models.
@@ -580,13 +561,13 @@ The script automatically detects available models and uses the best one.
   }
 
 if (options.listModels) {
-    const models = await getAvailableModels(options.llamaHost, options.llamaPort);
+    const models = await getAvailableModels(options.ollamaHost, options.ollamaPort);
     if (models.length > 0) {
       console.log('\n🦙 Available Ollama models:');
       models.forEach(model => {
         console.log(`  • ${model.name} (${model.size})`);
       });
-      console.log('\nDefault model order: llama3.2:3b > llama3.2:1b > llama3.1:8b > llama3:8b > llama3:instruct');
+      console.log('\nDefault model order: llama2:latest > gemma3n:latest > deepseek-r1:latest');
       console.log('Use with: --model <model-name>');
     } else {
       console.log('❌ Ollama server not found. Make sure Ollama is running:');
@@ -634,16 +615,16 @@ if (options.listModels) {
   }
 
   let commitMessage;
-  let usedLlama = false;
+  let usedOllama = false;
 
-  // Try to generate message with Llama if requested
-  if (options.llama) {
-    console.log('🦙 Generating commit message with local Llama...');
-    const llamaMessage = await generateCommitMessageWithLlama(files, diff, codeAnalysis, options);
-    if (llamaMessage) {
-      commitMessage = llamaMessage;
-      usedLlama = true;
-      console.log('✨ Llama-generated message ready!');
+  // Try to generate message with Ollama if requested
+  if (options.ollama) {
+    console.log('🦙 Generating commit message with local Ollama...');
+    const ollamaMessage = await generateCommitMessageWithOllama(files, diff, codeAnalysis, options);
+    if (ollamaMessage) {
+      commitMessage = ollamaMessage;
+      usedOllama = true;
+      console.log('✨ Ollama-generated message ready!');
     }
   }
 
@@ -663,7 +644,7 @@ if (options.listModels) {
   // Capitalize first letter
   commitMessage = commitMessage.charAt(0).toUpperCase() + commitMessage.slice(1);
 
-  console.log(`\n📝 Generated commit message (${usedLlama ? '🦙 Llama' : '🔧 Rule-based'}):`);
+  console.log(`\n📝 Generated commit message (${usedOllama ? '🦙 Ollama' : '🔧 Rule-based'}):`);
   console.log(`"${commitMessage}"\n`);
 
   // Ask if user wants to use this message
@@ -678,7 +659,7 @@ if (options.listModels) {
       if (answer.toLowerCase() === '' || answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes') {
         try {
           execSync(`git commit -m "${commitMessage}"`, { stdio: 'inherit' });
-          console.log(`✅ Commit created successfully! ${usedLlama ? '🦙' : '🔧'}`);
+          console.log(`✅ Commit created successfully! ${usedOllama ? '🦙' : '🔧'}`);
         } catch (error) {
           console.error('❌ Error creating commit:', error.message);
         }
@@ -715,5 +696,5 @@ module.exports = {
   getDetailedCommitMessage,
   hasStagedChanges,
   analyzeCodeChanges,
-  generateCommitMessageWithLlama
+  generateCommitMessageWithOllama
 };
