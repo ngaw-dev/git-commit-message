@@ -1,14 +1,17 @@
 {
   "name": "git-commit-message-generator",
-  "version": "1.0.0",
-  "description": "A Node.js script that analyzes git changes and generates appropriate commit messages",
+  "version": "2.0.0",
+  "description": "A Node.js script that analyzes git changes and generates appropriate commit messages using AI or rule-based approaches",
   "main": "git-commit-message.js",
   "bin": {
     "git-commit-message": "./git-commit-message.js"
   },
   "scripts": {
     "start": "node git-commit-message.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "commit": "node git-commit-message.js",
+    "commit-llama": "node git-commit-message.js --llama",
+    "list-models": "node git-commit-message.js --list-models"
   },
   "keywords": [
     "git",
@@ -16,11 +19,22 @@
     "message",
     "generator",
     "automation",
-    "cli"
+    "cli",
+    "llama",
+    "ai",
+    "ollama"
   ],
   "author": "",
   "license": "MIT",
   "engines": {
     "node": ">=12.0.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourusername/git-commit-message-generator.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/git-commit-message-generator/issues"
+  },
+  "homepage": "https://github.com/yourusername/git-commit-message-generator#readme"
 }

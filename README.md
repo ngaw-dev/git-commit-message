@@ -1,45 +1,82 @@
 # Git Commit Message Generator
 
-A Node.js script that analyzes staged file changes and automatically generates appropriate commit messages based on the types of files modified.
+A Node.js script that analyzes staged file changes and automatically generates appropriate commit messages using AI (local Llama models) or rule-based approaches.
 
 ## Features
 
+- 🦙 **AI-Powered Messages**: Generate natural commit messages using local Llama models via Ollama
 - 🔍 **Smart File Analysis**: Categorizes files by type (code, config, docs, tests, styles, scripts)
 - 📝 **Automatic Message Generation**: Creates descriptive commit messages based on changes
 - 🎯 **Staged Changes Only**: Analyzes only staged files for precise commits
 - 📊 **Detailed Mode**: Optional detailed commit messages with action verbs
 - 🔧 **CLI Options**: Flexible command-line interface
 - 💬 **Interactive Mode**: Confirms before committing (TTY environments)
+- 🔄 **Fallback System**: Automatically falls back to rule-based generation if AI is unavailable
+- 🎛️ **Model Selection**: Choose from available local Llama models
 
 ## Installation
 
+### Prerequisites
+
+1. **Node.js** (version 12+)
+2. **Ollama** (for AI-powered messages) - [Download Ollama](https://ollama.com/download)
+
+### Ollama Setup (for AI features)
+
+```bash
+# Install Ollama (follow instructions at https://ollama.com/download)
+
+# Start Ollama server
+ollama serve
+
+# Pull a Llama model (recommended)
+ollama pull llama3.2:3b
+
+# Or pull a smaller model for faster responses
+ollama pull llama3.2:1b
+
+# List available models
+ollama list
+```
+
+### Script Setup
+
 1. Clone or download the script
 2. Make sure you have Node.js installed (version 12+)
-3. The script is ready to use - no external dependencies required
+3. The script is ready to use - no external npm dependencies required
 
 ## Usage
 
 ### Basic Usage
 
 ```bash
-# Run the script
+# Run with rule-based generation
 node git-commit-message.js
+
+# Run with AI-powered generation (requires Ollama)
+node git-commit-message.js --llama
+
+# List available Llama models
+node git-commit-message.js --list-models
 ```
 
 ### Command Line Options
 
 ```bash
-# Show file details in commit message
-node git-commit-message.js --verbose
-
-# Generate detailed commit messages with action verbs
-node git-commit-message.js --detailed
-
-# Combine options
+# Rule-based options
+node git-commit-message.js --verbose          # Show file details
+node git-commit-message.js --detailed         # Detailed messages
 node git-commit-message.js --verbose --detailed
 
-# Show help
-node git-commit-message.js --help
+# AI-powered options
+node git-commit-message.js --llama            # Use local Llama model
+node git-commit-message.js --llama --model llama3.2:1b    # Specific model
+node git-commit-message.js --llama --host localhost        # Custom host
+node git-commit-message.js --llama --port 11434          # Custom port
+
+# Utility
+node git-commit-message.js --list-models      # List available models
+node git-commit-message.js --help             # Show help
 ```
 
 ### Short Options
@@ -47,11 +84,14 @@ node git-commit-message.js --help
 ```bash
 node git-commit-message.js -v          # Same as --verbose
 node git-commit-message.js -d          # Same as --detailed
+node git-commit-message.js -l          # Same as --llama
+node git-commit-message.js -m <model>  # Same as --model
 node git-commit-message.js -h          # Same as --help
 ```
 
 ## How It Works
 
+### Rule-Based Generation
 1. **File Detection**: Scans for staged files using `git diff --cached --name-only`
 2. **Categorization**: Groups files by type:
    - **Code**: `.js`, `.jsx`, `.ts`, `.tsx`, `.py`, `.java`, `.cpp`, `.c`, etc.
@@ -67,45 +107,116 @@ node git-commit-message.js -h          # Same as --help
    - "Update documentation, test file"
    - "Add: Enhance source code file, update stylesheet"
 
+### AI-Powered Generation (Llama)
+1. **Diff Analysis**: Extracts detailed diff content using `git diff --cached --unified=3`
+2. **Context Prompting**: Creates a structured prompt with:
+   - File list
+   - Git diff content (truncated if too long)
+   - Commit message guidelines
+3. **Llama Processing**: Sends prompt to local Llama model via Ollama API
+4. **Response Cleaning**: Processes and validates the AI response
+5. **Quality Check**: Ensures message meets length and format requirements
+
+### Fallback System
+- Automatically falls back to rule-based generation if:
+  - Ollama server is not running
+  - Network connection fails
+  - AI response is invalid or too long
+  - Request times out
+
 ## Examples
 
-### Example 1: Code Changes
+### Example 1: Code Changes (Rule-based)
 ```bash
 # After staging some JavaScript and CSS files
 $ git add src/app.js src/utils.js styles/main.css
 $ node git-commit-message.js
 
-📝 Generated commit message:
+🔍 Analyzing 3 staged files...
+📝 Rule-based message generated
+
+📝 Generated commit message (🔧 Rule-based):
 "Update 2 source code file, 1 stylesheet"
 
 Use this message? (Y/n): y
-✅ Commit created successfully!
+✅ Commit created successfully! 🔧
 ```
 
-### Example 2: Documentation Update
+### Example 2: AI-Powered Generation
+```bash
+# After implementing a new feature
+$ git add src/user-auth.js tests/auth.test.js
+$ node git-commit-message.js --llama
+
+🔍 Analyzing 2 staged files...
+🦙 Generating commit message with local Llama...
+✨ Llama-generated message ready!
+
+📝 Generated commit message (🦙 Llama):
+"Add user authentication with comprehensive test coverage"
+
+Use this message? (Y/n): y
+✅ Commit created successfully! 🦙
+```
+
+### Example 3: Documentation Update
 ```bash
 # After updating documentation
 $ git add README.md CHANGELOG.md
 $ node git-commit-message.js --verbose
 
-📝 Generated commit message:
+🔍 Analyzing 2 staged files...
+📝 Rule-based message generated
+
+📝 Generated commit message (🔧 Rule-based):
 "Update documentation (README.md, CHANGELOG.md)"
 
 Use this message? (Y/n): y
-✅ Commit created successfully!
+✅ Commit created successfully! 🔧
 ```
 
-### Example 3: Detailed Mode
+### Example 4: Model Selection
 ```bash
-# After making significant additions
-$ git add src/new-feature.js tests/new-feature.test.js
-$ node git-commit-message.js --detailed
+# List available models
+$ node git-commit-message.js --list-models
 
-📝 Generated commit message:
-"Add: Enhance source code file, update test file"
+🦙 Available Llama models:
+  • llama3.2:3b (4.7 GB)
+  • llama3.2:1b (1.3 GB)
+
+Use with: --model <model-name>
+
+# Use specific model
+$ git add src/api.js
+$ node git-commit-message.js --llama --model llama3.2:1b
+
+🔍 Analyzing 1 staged file...
+🦙 Generating commit message with local Llama...
+✨ Llama-generated message ready!
+
+📝 Generated commit message (🦙 Llama):
+"Implement REST API endpoints for data management"
 
 Use this message? (Y/n): y
-✅ Commit created successfully!
+✅ Commit created successfully! 🦙
+```
+
+### Example 5: Fallback Behavior
+```bash
+# When Ollama is not running
+$ git add package.json
+$ node git-commit-message.js --llama
+
+🔍 Analyzing 1 staged file...
+🦙 Generating commit message with local Llama...
+🤖 Local Llama server not found. Falling back to rule-based generation...
+📝 Rule-based message generated
+
+📝 Generated commit message (🔧 Rule-based):
+"Update configuration"
+
+Use this message? (Y/n): y
+✅ Commit created successfully! 🔧
 ```
 
 ## Integration with Git Workflow
@@ -117,11 +228,36 @@ Add this to your `~/.gitconfig` file:
 ```ini
 [alias]
     commit-msg = "!node /path/to/git-commit-message.js"
+    commit-ai = "!node /path/to/git-commit-message.js --llama"
+    commit-verbose = "!node /path/to/git-commit-message.js --verbose"
 ```
 
 Then you can use:
 ```bash
-git commit-msg
+git commit-msg          # Rule-based
+git commit-ai           # AI-powered
+git commit-verbose      # Verbose rule-based
+```
+
+### NPM Scripts
+
+Add to your `package.json`:
+
+```json
+{
+  "scripts": {
+    "commit": "node git-commit-message.js",
+    "commit-ai": "node git-commit-message.js --llama",
+    "commit-detailed": "node git-commit-message.js --detailed --llama"
+  }
+}
+```
+
+Usage:
+```bash
+npm run commit
+npm run commit-ai
+npm run commit-detailed
 ```
 
 ### Pre-commit Hook (Optional)
@@ -130,7 +266,8 @@ Create `.git/hooks/pre-commit`:
 
 ```bash
 #!/bin/bash
-node /path/to/git-commit-message.js --staged
+echo "Generating AI commit message..."
+node /path/to/git-commit-message.js --llama
 ```
 
 Make it executable:
@@ -138,13 +275,90 @@ Make it executable:
 chmod +x .git/hooks/pre-commit
 ```
 
+### VS Code Integration
+
+Add to your `.vscode/tasks.json`:
+
+```json
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Git Commit (AI)",
+      "type": "shell",
+      "command": "node",
+      "args": ["/path/to/git-commit-message.js", "--llama"],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      }
+    }
+  ]
+}
+```
+
+## Troubleshooting
+
+### Ollama Issues
+
+**Ollama server not running:**
+```bash
+# Start Ollama
+ollama serve
+
+# Verify it's running
+curl http://localhost:11434/api/tags
+```
+
+**No models available:**
+```bash
+# Pull recommended models
+ollama pull llama3.2:3b
+ollama pull llama3.2:1b
+
+# List available models
+ollama list
+```
+
+**Port conflicts:**
+```bash
+# Use custom port
+node git-commit-message.js --llama --port 11435
+```
+
+### Script Issues
+
+**Permission denied:**
+```bash
+chmod +x git-commit-message.js
+```
+
+**Node.js not found:**
+```bash
+# Install Node.js from https://nodejs.org/
+# or use package manager:
+brew install node  # macOS
+sudo apt install nodejs npm  # Ubuntu
+```
+
+## Performance Tips
+
+1. **Model Selection**: Use smaller models (`llama3.2:1b`) for faster responses
+2. **Diff Size**: Large diffs are truncated to 2000 characters for performance
+3. **Fallback**: Rule-based generation is always faster than AI generation
+4. **Network**: Ensure Ollama server is responsive for best AI performance
+
 ## Output
 
 The script provides:
-- **Generated commit message** in quotes
-- **Interactive confirmation** in TTY environments
-- **Manual commit command** if cancelled
-- **Success/error feedback**
+- **🔍 File analysis progress** with file count
+- **🦙 AI generation status** with model used
+- **📝 Generated commit message** with method indicator
+- **✅ Success feedback** with AI/Rule-based emoji indicator
+- **🤖 Fallback notifications** when AI is unavailable
 
 ## Error Handling
 
@@ -152,12 +366,21 @@ The script provides:
 - Validates that files are staged
 - Handles git command failures gracefully
 - Provides helpful error messages
+- Automatic fallback to rule-based generation
+- Network timeout handling (15 seconds)
+- AI response validation and cleaning
 
 ## Requirements
 
+### Minimum Requirements
 - Node.js 12.0.0 or higher
 - Git repository
 - Staged files (use `git add` first)
+
+### For AI Features
+- Ollama installed and running
+- At least one Llama model pulled
+- Sufficient RAM for model (1B model ~2GB, 3B model ~6GB)
 
 ## License
 
@@ -166,3 +389,14 @@ MIT
 ## Contributing
 
 Feel free to submit issues and enhancement requests!
+
+### Development
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/git-commit-message-generator.git
+cd git-commit-message-generator
+
+# Test the script
+node git-commit-message.js --help
+node git-commit-message.js --list-models
+```
