@@ -566,24 +566,34 @@ Examples:
   node git-commit-message.js --verbose --llama
   node git-commit-message.js --list-models
 
-Note: Requires Ollama with Llama models running locally.
+Note: Requires Ollama server running locally with models.
 Install Ollama: https://ollama.com/download
-Start Ollama: ollama serve
-Pull model: ollama pull llama3.2:3b
+
+Quick setup:
+  ollama serve                 # Start Ollama server
+  ollama pull llama3.2:3b     # Pull recommended model
+  ollama pull llama3.2:1b     # Or pull faster model
+
+The script automatically detects available models and uses the best one.
 `);
     process.exit(0);
   }
 
-  if (options.listModels) {
+if (options.listModels) {
     const models = await getAvailableModels(options.llamaHost, options.llamaPort);
     if (models.length > 0) {
-      console.log('\n🦙 Available Llama models:');
+      console.log('\n🦙 Available Ollama models:');
       models.forEach(model => {
         console.log(`  • ${model.name} (${model.size})`);
       });
-      console.log('\nUse with: --model <model-name>');
+      console.log('\nDefault model order: llama3.2:3b > llama3.2:1b > llama3.1:8b > llama3:8b > llama3:instruct');
+      console.log('Use with: --model <model-name>');
     } else {
-      console.log('❌ No Llama server found. Make sure Ollama is running: ollama serve');
+      console.log('❌ Ollama server not found. Make sure Ollama is running:');
+      console.log('  ollama serve');
+      console.log('\nThen pull a model:');
+      console.log('  ollama pull llama3.2:3b  # Recommended');
+      console.log('  ollama pull llama3.2:1b  # Faster');
     }
     process.exit(0);
   }
