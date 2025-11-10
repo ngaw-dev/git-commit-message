@@ -36,5 +36,8 @@
   "bugs": {
     "url": "https://github.com/yourusername/git-commit-message-generator/issues"
   },
-  "homepage": "https://github.com/yourusername/git-commit-message-generator#readme"
+  "homepage": "https://github.com/yourusername/git-commit-message-generator#readme",
+  "dependencies": {
+    "prettier": "^3.6.2"
+  }
 }
