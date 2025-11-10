@@ -1,0 +1,26 @@
+{
+  "name": "git-commit-message-generator",
+  "version": "1.0.0",
+  "description": "A Node.js script that analyzes git changes and generates appropriate commit messages",
+  "main": "git-commit-message.js",
+  "bin": {
+    "git-commit-message": "./git-commit-message.js"
+  },
+  "scripts": {
+    "start": "node git-commit-message.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "git",
+    "commit",
+    "message",
+    "generator",
+    "automation",
+    "cli"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=12.0.0"
+  }
+}
