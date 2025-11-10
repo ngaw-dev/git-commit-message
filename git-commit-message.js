@@ -85,9 +85,43 @@ function categorizeFiles(files) {
 }
 
 /**
- * Generate commit message based on file categories
+ * Generate commit message based on code analysis and file categories
  */
-function generateCommitMessage(categories, options = {}) {
+function generateCommitMessage(categories, codeAnalysis, options = {}) {
+  // If we have code analysis patterns, use them for more specific messages
+  if (codeAnalysis.patterns.length > 0) {
+    const primaryPattern = codeAnalysis.patterns[0];
+
+    // Combine with file category information
+    const categoryParts = [];
+
+    if (categories.code.length > 0 && codeAnalysis.functions.length > 0) {
+      categoryParts.push(`${codeAnalysis.functions.length} function${codeAnalysis.functions.length > 1 ? 's' : ''}`);
+    }
+    if (categories.tests.length > 0 && codeAnalysis.tests.length > 0) {
+      categoryParts.push(`${codeAnalysis.tests.length} test${codeAnalysis.tests.length > 1 ? 's' : ''}`);
+    }
+    if (codeAnalysis.imports.length > 0) {
+      categoryParts.push('new imports');
+    }
+    if (codeAnalysis.types.length > 0) {
+      categoryParts.push(`${codeAnalysis.types.length} type${codeAnalysis.types.length > 1 ? 's' : ''}`);
+    }
+
+    // Remove "Add" prefix from pattern action if we have specifics to add
+    let action = primaryPattern.action;
+    if (action.startsWith('Add ') && categoryParts.length > 0) {
+      action = action.replace('Add ', '');
+    }
+
+    if (categoryParts.length > 0) {
+      return `${action} with ${categoryParts.join(', ')}`;
+    } else {
+      return action;
+    }
+  }
+
+  // Fallback to original category-based generation
   const messages = [];
 
   // Function to add category messages
@@ -178,29 +212,162 @@ function getDetailedDiff() {
 }
 
 /**
- * Check if local Llama server is available
+ * Analyze code changes in files
  */
-async function checkLlamaServer(host = 'localhost', port = '11434') {
+function analyzeCodeChanges(files, diff) {
+  const analysis = {
+    patterns: [],
+    functions: [],
+    imports: [],
+    tests: [],
+    configs: [],
+    types: [],
+    summary: ''
+  };
+
+  // Analyze each file for specific patterns
+  files.forEach(file => {
+    const ext = path.extname(file).toLowerCase();
+    const basename = path.basename(file).toLowerCase();
+
+    // Function/method analysis
+    if (['.js', '.jsx', '.ts', '.tsx', '.py', '.java', '.cpp', '.c'].includes(ext)) {
+      const functionPattern = diff.match(new RegExp(`[-+].*function\\s+(\\w+)\\s*\\(|[-+].*const\\s+(\\w+)\\s*=\\s*(?:\\([^)]*\\)\\s*=>|async\\s+\\([^)]*\\)\\s*=>)|[-+].*class\\s+(\\w+)|[-+].*def\\s+(\\w+)\\s*\\(`, 'g'));
+      if (functionPattern) {
+        functionPattern.forEach(match => {
+          const funcMatch = match.match(/(?:function|const|class|def)\s+(\w+)/);
+          if (funcMatch && !analysis.functions.includes(funcMatch[1])) {
+            analysis.functions.push(funcMatch[1]);
+          }
+        });
+      }
+    }
+
+    // Import/require analysis
+    if (['.js', '.jsx', '.ts', '.tsx', '.py'].includes(ext)) {
+      const importPattern = diff.match(new RegExp(`[-+].*(?:import|require|from)\\s+['"][^'"]+['"]|[-+].*import\\s+.*from\\s+['"][^'"]+['"]`, 'g'));
+      if (importPattern) {
+        importPattern.forEach(match => {
+          if (match.startsWith('+')) {
+            analysis.imports.push(match.replace(/^\+\s*/, ''));
+          }
+        });
+      }
+    }
+
+    // Test pattern analysis
+    if (basename.includes('test') || basename.includes('spec')) {
+      const testPattern = diff.match(/\+.*(?:test|it|describe|expect)\s*\(/g);
+      if (testPattern) {
+        analysis.tests.push(...testPattern.map(m => m.replace(/^\+\s*/, '')));
+      }
+    }
+
+    // Configuration analysis
+    if (['.json', '.yml', '.yaml', '.toml', '.env'].includes(ext) || basename.includes('config')) {
+      const configPattern = diff.match(/\+.*"[^"]+"\s*:\s*[^,}]+/g);
+      if (configPattern) {
+        analysis.configs.push(...configPattern.map(m => m.replace(/^\+\s*/, '').substring(0, 50)));
+      }
+    }
+
+    // Type analysis (TypeScript)
+    if (['.ts', '.tsx'].includes(ext)) {
+      const typePattern = diff.match(/\+.*(?:interface|type|enum)\s+\w+/g);
+      if (typePattern) {
+        analysis.types.push(...typePattern.map(m => m.replace(/^\+\s*/, '')));
+      }
+    }
+  });
+
+  // Detect common patterns
+  const patterns = [
+    { pattern: /\+.*console\.log|console\.debug|console\.info/, type: 'debugging', action: 'Add debug logging' },
+    { pattern: /\+.*TODO|FIXME|HACK/, type: 'todos', action: 'Add TODO comments' },
+    { pattern: /\+.*export\s+(?:default\s+)?(?:class|function|const|var|let)/, type: 'exports', action: 'Add exports' },
+    { pattern: /-.*console\.log|console\.debug|console\.info/, type: 'debugging', action: 'Remove debug logging' },
+    { pattern: /\+.*eslint|prettier|stylelint/, type: 'linting', action: 'Add linting rules' },
+    { pattern: /\+.*test|spec|describe|it|expect/, type: 'tests', action: 'Add test cases' },
+    { pattern: /-.*test|spec|describe|it|expect/, type: 'tests', action: 'Remove test cases' },
+    { pattern: /\+.*catch|try|throw\s+new\s+Error/, type: 'error-handling', action: 'Add error handling' },
+    { pattern: /\+.*async|await|Promise|\.then\(|\.catch\(/
+, type: 'async', action: 'Add async functionality' },
+    { pattern: /\+.*fetch|axios|XMLHttpRequest|http\./, type: 'api', action: 'Add API calls' },
+    { pattern: /\+.*useState|useEffect|useContext|useReducer/, type: 'react-hooks', action: 'Add React hooks' },
+    { pattern: /\+.*Component|extends.*Component|React\.Component/, type: 'react-components', action: 'Add React components' },
+    { pattern: /\+.*router|route|\/api\//, type: 'routing', action: 'Add routing' },
+    { pattern: /\+.*mongoose|sequelize|prisma|sql/, type: 'database', action: 'Add database operations' },
+    { pattern: /\+.*auth|jwt|bcrypt|passport/, type: 'authentication', action: 'Add authentication' },
+    { pattern: /\+.*validation|validate|joi|yup/, type: 'validation', action: 'Add validation' }
+  ];
+
+  patterns.forEach(({ pattern, type, action }) => {
+    if (pattern.test(diff)) {
+      if (!analysis.patterns.find(p => p.type === type)) {
+        analysis.patterns.push({ type, action });
+      }
+    }
+  });
+
+  // Generate summary
+  const parts = [];
+  if (analysis.functions.length > 0) {
+    parts.push(`${analysis.functions.length} function${analysis.functions.length > 1 ? 's' : ''}`);
+  }
+  if (analysis.imports.length > 0) {
+    parts.push(`${analysis.imports.length} import${analysis.imports.length > 1 ? 's' : ''}`);
+  }
+  if (analysis.tests.length > 0) {
+    parts.push(`${analysis.tests.length} test${analysis.tests.length > 1 ? 's' : ''}`);
+  }
+  if (analysis.configs.length > 0) {
+    parts.push('configuration changes');
+  }
+  if (analysis.types.length > 0) {
+    parts.push(`${analysis.types.length} type${analysis.types.length > 1 ? 's' : ''}`);
+  }
+
+  analysis.summary = parts.length > 0 ? parts.join(', ') : 'code changes';
+
+  return analysis;
+}
+
+/**
+ * Check if local Ollama server is available and get available models
+ */
+async function checkOllamaServer(host = 'localhost', port = '11434') {
   return new Promise((resolve) => {
     const options = {
       hostname: host,
       port: port,
       path: '/api/tags',
       method: 'GET',
-      timeout: 3000
+      timeout: 5000
     };
 
     const req = http.request(options, (res) => {
-      resolve(res.statusCode === 200);
+      let data = '';
+      res.on('data', (chunk) => data += chunk);
+      res.on('end', () => {
+        try {
+          const response = JSON.parse(data);
+          resolve({
+            available: res.statusCode === 200,
+            models: response.models || []
+          });
+        } catch (error) {
+          resolve({ available: false, models: [] });
+        }
+      });
     });
 
     req.on('error', () => {
-      resolve(false);
+      resolve({ available: false, models: [] });
     });
 
     req.on('timeout', () => {
       req.destroy();
-      resolve(false);
+      resolve({ available: false, models: [] });
     });
 
     req.end();
@@ -208,45 +375,82 @@ async function checkLlamaServer(host = 'localhost', port = '11434') {
 }
 
 /**
- * Generate commit message using local Llama model
+ * Generate commit message using local Ollama server
  */
-async function generateCommitMessageWithLlama(files, diff, options = {}) {
-  const llamaAvailable = await checkLlamaServer();
+async function generateCommitMessageWithLlama(files, diff, codeAnalysis, options = {}) {
+  const ollamaStatus = await checkOllamaServer(options.llamaHost, options.llamaPort);
 
-  if (!llamaAvailable) {
-    console.log('🤖 Local Llama server not found. Falling back to rule-based generation...\n');
+  if (!ollamaStatus.available) {
+    console.log('🤖 Ollama server not found. Falling back to rule-based generation...\n');
     return null;
   }
 
+  // Check if we have any compatible models
+  const defaultModels = ['llama3.2:3b', 'llama3.2:1b', 'llama3.1:8b', 'llama3:8b', 'llama3:instruct', 'codellama:7b', 'mistral:7b'];
+  const availableModelNames = ollamaStatus.models.map(m => m.name);
+
+  let model = options.llamaModel;
+  if (!model) {
+    // Find first available model from our preferred list
+    model = defaultModels.find(m => availableModelNames.includes(m)) || availableModelNames[0];
+  }
+
+  if (!model) {
+    console.log('🤖 No compatible models found in Ollama. Falling back to rule-based generation...\n');
+    return null;
+  }
+
+  console.log(`🦙 Using Ollama model: ${model}`);
+
   return new Promise((resolve, reject) => {
-    // Create a detailed prompt for Llama
+    // Create a detailed prompt for Llama with code analysis
     const prompt = `You are an expert developer who writes excellent git commit messages.
-Based on the following git diff information, generate a concise and descriptive commit message.
+Based on the following comprehensive analysis, generate a concise and descriptive commit message.
 
 Files changed: ${files.join(', ')}
 
-Git diff:
-${diff.length > 2000 ? diff.substring(0, 2000) + '\n... (truncated)' : diff}
+Code Analysis Summary: ${codeAnalysis.summary}
 
-Guidelines:
-- Keep the message under 72 characters
-- Use present tense, imperative mood (e.g., "Add feature" not "Added feature")
-- Start with a verb: Add, Fix, Update, Remove, Refactor, Improve, etc.
-- Be specific but concise
-- Focus on the "why" not just the "what"
-- Don't include file names in the message unless absolutely necessary
+Detected Patterns:
+${codeAnalysis.patterns.length > 0 ? codeAnalysis.patterns.map(p => `- ${p.action}`).join('\n') : '- No specific patterns detected'}
+
+Functions/Classes: ${codeAnalysis.functions.length > 0 ? codeAnalysis.functions.join(', ') : 'None'}
+Imports: ${codeAnalysis.imports.length > 0 ? codeAnalysis.imports.slice(0, 3).join(', ') + (codeAnalysis.imports.length > 3 ? '...' : '') : 'None'}
+Tests: ${codeAnalysis.tests.length > 0 ? `${codeAnalysis.tests.length} test cases` : 'None'}
+Types: ${codeAnalysis.types.length > 0 ? codeAnalysis.types.join(', ') : 'None'}
+
+Git diff (relevant parts):
+${diff.length > 1500 ? diff.substring(0, 1500) + '\n... (truncated for brevity)' : diff}
+
+Based on this analysis, determine the most important change and create a commit message that:
+- Is under 72 characters
+- Uses present tense, imperative mood (Add, Fix, Update, Remove, Refactor, Improve, etc.)
+- Focuses on the primary change or feature addition
+- Is specific but concise
+- Prioritizes user-facing functionality over internal changes
+- Don't include file names unless absolutely necessary
 - Don't end with a period
+
+If multiple significant changes exist, prioritize them in this order:
+1. New features/functionality
+2. Bug fixes
+3. Refactoring/optimization
+4. Documentation/configuration
+5. Tests/quality improvements
 
 Generate only the commit message, nothing else:`;
 
     const requestData = JSON.stringify({
-      model: options.llamaModel || 'llama3.2:3b',
+      model: model,
       prompt: prompt,
       stream: false,
       options: {
         temperature: 0.3,
         top_p: 0.9,
-        max_tokens: 100
+        max_tokens: 80,
+        num_predict: 80,
+        repeat_penalty: 1.1,
+        seed: 42
       }
     });
 
@@ -259,7 +463,7 @@ Generate only the commit message, nothing else:`;
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(requestData)
       },
-      timeout: 15000
+      timeout: 20000
     };
 
     const req = http.request(ollamaOptions, (res) => {
@@ -316,38 +520,11 @@ Generate only the commit message, nothing else:`;
 }
 
 /**
- * Get available Llama models
+ * Get available Ollama models
  */
 async function getAvailableModels(host = 'localhost', port = '11434') {
-  return new Promise((resolve) => {
-    const options = {
-      hostname: host,
-      port: port,
-      path: '/api/tags',
-      method: 'GET',
-      timeout: 5000
-    };
-
-    const req = http.request(options, (res) => {
-      let data = '';
-      res.on('data', (chunk) => data += chunk);
-      res.on('end', () => {
-        try {
-          const response = JSON.parse(data);
-          resolve(response.models || []);
-        } catch (error) {
-          resolve([]);
-        }
-      });
-    });
-
-    req.on('error', () => resolve([]));
-    req.on('timeout', () => {
-      req.destroy();
-      resolve([]);
-    });
-    req.end();
-  });
+  const ollamaStatus = await checkOllamaServer(host, port);
+  return ollamaStatus.models;
 }
 
 /**
@@ -428,8 +605,23 @@ Pull model: ollama pull llama3.2:3b
 
   const files = getStagedFiles();
   const diff = getDetailedDiff();
+  const codeAnalysis = analyzeCodeChanges(files, diff);
 
   console.log(`🔍 Analyzing ${files.length} staged file${files.length > 1 ? 's' : ''}...`);
+
+  // Show analysis details
+  if (codeAnalysis.patterns.length > 0) {
+    console.log(`📊 Detected patterns: ${codeAnalysis.patterns.map(p => p.action).join(', ')}`);
+  }
+  if (codeAnalysis.functions.length > 0) {
+    console.log(`🔧 Functions: ${codeAnalysis.functions.join(', ')}`);
+  }
+  if (codeAnalysis.imports.length > 0) {
+    console.log(`📦 New imports: ${codeAnalysis.imports.length}`);
+  }
+  if (codeAnalysis.tests.length > 0) {
+    console.log(`🧪 Tests: ${codeAnalysis.tests.length}`);
+  }
 
   let commitMessage;
   let usedLlama = false;
@@ -437,7 +629,7 @@ Pull model: ollama pull llama3.2:3b
   // Try to generate message with Llama if requested
   if (options.llama) {
     console.log('🦙 Generating commit message with local Llama...');
-    const llamaMessage = await generateCommitMessageWithLlama(files, diff, options);
+    const llamaMessage = await generateCommitMessageWithLlama(files, diff, codeAnalysis, options);
     if (llamaMessage) {
       commitMessage = llamaMessage;
       usedLlama = true;
@@ -445,17 +637,17 @@ Pull model: ollama pull llama3.2:3b
     }
   }
 
-  // Fallback to rule-based generation
+  // Fallback to rule-based generation with code analysis
   if (!commitMessage) {
     const categories = categorizeFiles(files);
     if (options.detailed) {
       const action = getDetailedCommitMessage(options);
-      const subject = generateCommitMessage(categories, options);
+      const subject = generateCommitMessage(categories, codeAnalysis, options);
       commitMessage = `${action}: ${subject}`;
     } else {
-      commitMessage = generateCommitMessage(categories, options);
+      commitMessage = generateCommitMessage(categories, codeAnalysis, options);
     }
-    console.log('📝 Rule-based message generated');
+    console.log('📝 Smart rule-based message generated');
   }
 
   // Capitalize first letter
@@ -511,5 +703,7 @@ module.exports = {
   categorizeFiles,
   generateCommitMessage,
   getDetailedCommitMessage,
-  hasStagedChanges
+  hasStagedChanges,
+  analyzeCodeChanges,
+  generateCommitMessageWithLlama
 };
